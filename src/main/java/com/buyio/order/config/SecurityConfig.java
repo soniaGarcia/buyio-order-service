@@ -1,6 +1,6 @@
-package com.empresa.order.config;
+package com.buyio.order.config;
 
-import com.empresa.order.security.JwtAuthenticationFilter;
+import com.buyio.order.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
