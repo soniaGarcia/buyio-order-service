@@ -3,18 +3,27 @@ package com.buyio.order.service;
 import com.buyio.order.domain.*;
 import com.buyio.order.repository.PurchaseOrderRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PurchaseOrderService {
 
     private final PurchaseOrderRepository orderRepository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+
+    @Value("${app.kafka.topic-order:OrderEvents}")
+    private String orderTopic;
 
     public List<PurchaseOrder> findAll() {
         return orderRepository.findAll();
@@ -44,7 +53,13 @@ public class PurchaseOrderService {
             total = total.add(lineTotal);
         }
         order.setTotalAmount(total);
-        return orderRepository.save(order);
+
+        PurchaseOrder savedOrder = orderRepository.save(order);
+
+        // Emitir evento de creación a Kafka
+        publishEvent("ORDER_CREATED", savedOrder);
+
+        return savedOrder;
     }
 
     @Transactional
@@ -57,6 +72,30 @@ public class PurchaseOrderService {
         }
         
         order.setStatus(newStatus);
-        return orderRepository.save(order);
+        PurchaseOrder updatedOrder = orderRepository.save(order);
+
+        // Emitir evento de cambio de estado a Kafka
+        publishEvent("ORDER_STATUS_UPDATED", updatedOrder);
+
+        return updatedOrder;
+    }
+
+    private void publishEvent(String eventType, PurchaseOrder order) {
+        try {
+            OrderEvent event = new OrderEvent(
+                    eventType,
+                    order.getId(),
+                    order.getOrderNumber(),
+                    order.getStatus().name(),
+                    order.getTotalAmount(),
+                    order.getSupplierId(),
+                    LocalDateTime.now().toString()
+            );
+
+            kafkaTemplate.send(orderTopic, order.getId().toString(), event);
+            log.info("Evento [{}] publicado exitosamente en el tópico [{}]: ID Orden {}", eventType, orderTopic, order.getId());
+        } catch (Exception e) {
+            log.error("Error al publicar evento [{}] en Kafka para la orden {}", eventType, order.getId(), e);
+        }
     }
 }

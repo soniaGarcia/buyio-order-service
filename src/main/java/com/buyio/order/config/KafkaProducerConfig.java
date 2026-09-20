@@ -1,5 +1,7 @@
 package com.buyio.order.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,16 +18,28 @@ import java.util.Map;
 @Configuration
 public class KafkaProducerConfig {
 
-    @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
+    @Value("${SPRING_KAFKA_BOOTSTRAP_SERVERS:${KAFKA_BOOTSTRAP_SERVERS:kafka:29092}}")
     private String bootstrapServers;
 
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
         Map<String, Object> configProps = new HashMap<>();
         configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
-        return new DefaultKafkaProducerFactory<>(configProps);
+
+        // 1. Instanciación explícita del Mapper de Jackson
+        ObjectMapper objectMapper = new ObjectMapper();
+        
+        // 2. Escanea el classpath y registra automáticamente el módulo JSR-310 (java.time)
+        objectMapper.findAndRegisterModules();
+        
+        // 3. Serializa fechas en formato estándar ISO-8601 ("2026-09-20T00:35:59") en lugar de timestamps numéricos
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        return new DefaultKafkaProducerFactory<>(
+                configProps,
+                new StringSerializer(),
+                new JsonSerializer<>(objectMapper)
+        );
     }
 
     @Bean
